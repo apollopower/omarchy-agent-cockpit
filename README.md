@@ -1,13 +1,14 @@
 # Agent Cockpit
 
-An Omarchy bar widget for people who run several coding agents at once. The bar
-shows how many sessions are live and how many are waiting on you; the panel
-tells you which ones, and jumps you straight to the right tmux pane.
+An Omarchy bar widget for people who run several coding agents at once. It
+tells you which ones are actually waiting on you, and jumps you straight to the
+right tmux pane.
 
 ![Agent Cockpit panel](preview.png)
 
-The bar badge reads `blocked/total` when something needs you, and just `total`
-otherwise.
+The bar carries a single `>_` icon that sits quietly at the same weight as your
+other status icons, and shifts to your theme's urgent colour when an agent is
+blocked. No counters, nothing appearing or disappearing.
 
 ## Install
 
@@ -22,25 +23,38 @@ omarchy plugin add https://github.com/apollopower/omarchy-agent-cockpit --enable
 | `j` / `k` | move the selection |
 | `Enter` | on a session, focus its exact tmux pane; on a worktree, open it in a terminal |
 | `t` | focus the tmux terminal, opening a new window for a worktree |
+| `w` | collapse the worktree list to one row per repository, and back |
 | `Tab` | switch to the neighbouring bar panel |
 | `Esc` | close |
 
 ## Configuration
 
-Set these under the widget's entry in `~/.config/omarchy/shell.json`:
+Settings go **inline on the widget's entry** in `~/.config/omarchy/shell.json`,
+alongside `id` — not nested under a `settings` key, which is silently ignored:
+
+```json
+{
+  "id": "apollo.agent-cockpit",
+  "worktreeRoots": "~/code:~/Work/repos",
+  "showLinkedWorktrees": false
+}
+```
+
+They take effect on save; `shell.json` hot-reloads and the running widget is
+patched in place, so no restart is needed (unlike editing the plugin's QML).
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `refreshIntervalSec` | `10` | how often to poll (minimum 5) |
 | `stuckAfterSec` | `600` | how long a mid-loop session may go without progress before it is called stuck (minimum 60) |
-| `worktreeRoots` | `~/Work/repos` | colon-separated directories whose immediate git repos are listed |
+| `worktreeRoots` | `~/Work/repos` | colon-separated directories to scan for git repositories |
+| `showLinkedWorktrees` | `true` | which mode the panel opens in. `w` flips it live; this only sets the starting state |
 | `terminal` | *(empty)* | terminal used to open a worktree outside tmux; empty means `$TERMINAL`, then the first of alacritty, foot, kitty, ghostty that is installed |
 
 ## What the states mean
 
-The bar shows a `>_` icon, always present like the other status icons. It stays
-the same colour as its neighbours until an agent is **blocked**, and then shifts
-to your theme's urgent colour. Nothing appears, nothing counts up.
+Every session is in exactly one of four states, and they are not equally
+interesting:
 
 | State | Icon | What it actually means |
 | --- | --- | --- |
@@ -55,7 +69,7 @@ on you.
 
 ### Where the signal comes from
 
-**Opencode** records a question as a `question` tool part still in the
+**opencode** records a question as a `question` tool part still in the
 `running` state, and every assistant message records how its turn ended
 (`tool-calls` mid-loop, `stop` / `unknown` / `length` / absent for a finished
 turn — absent meaning aborted). Both are read from its SQLite store, scoped to
@@ -79,12 +93,27 @@ tail is read, since transcripts reach megabytes.
   state is keyed by working directory. Two *different* agents in the same
   directory are tracked separately.
 
+### Which worktrees are listed
+
+Worktrees come from `git worktree list` on every repository found under
+`worktreeRoots`, not from the directory layout — so a worktree parked inside
+its own repo (`.plax/worktrees/<name>`, a common convention for agent tooling)
+is listed like any other. They are grouped under the repository they belong to,
+and nested ones are labelled `<repo>/<worktree>` so it is obvious what they are
+part of. A plain clone reports itself as its own single worktree, so it appears
+exactly once.
+
+Press `w` to collapse the list to one row per repository — the header changes to
+REPOSITORIES so the mode is never ambiguous. Note this hides top-level linked
+worktrees too, not just nested ones: a sibling directory created by
+`git worktree add` is a worktree, not a separate repo.
+
 ## Requirements
 
 Omarchy's Quickshell bar and Hyprland. Beyond that: `jq`, `python3`, `git` and
 `hyprctl`, all present on a stock Omarchy install. `tmux` is needed for pane
-focusing and the `t` key. `sqlite3` is needed for Opencode status — without it
-Opencode sessions fall back to the Claude transcript heuristic.
+focusing and the `t` key. `sqlite3` is needed for opencode status — without it
+opencode sessions fall back to the Claude transcript heuristic.
 
 Nothing is written outside the plugin directory, so removal is just
 `omarchy plugin remove apollo.agent-cockpit`.

@@ -23,6 +23,7 @@ STUCK_AFTER="${1:-600}"
 # values otherwise.
 WORKTREE_ROOTS="${2:-$HOME/Work/repos}"
 
+
 # --- find terminal PID by walking parent chain ---
 find_terminal_pid() {
   local pid=$1 ppid comm
@@ -220,7 +221,42 @@ for spid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
   [ -n "$spid_cwd" ] && agent_cwds+="$spid_cwd"$'\n'
 done
 
+# Ask git what the worktrees are rather than guessing from the directory
+# layout. Globbing $root/*/ only ever saw repos exactly one level down, so a
+# worktree parked inside its own repo -- .plax/worktrees/<name>, a common
+# convention for agent tooling -- was invisible, and a plain clone was listed
+# as a "worktree" it never was.
+declare -A SEEN_WORKTREE
 worktrees=()
+
+add_worktree() {
+  local path="$1" branch="$2" label="$3" parent="$4" is_main="$5"
+  [ -n "$path" ] || return 0
+  [ -n "${SEEN_WORKTREE[$path]:-}" ] && return 0
+  [ -d "$path" ] || return 0          # git lists prunable entries too
+  SEEN_WORKTREE["$path"]=1
+
+  local dirty session_attached=false
+  dirty=$(git -C "$path" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  case "$agent_cwds" in
+    *$'\n'"$path"$'\n'*) session_attached=true ;;
+  esac
+
+  # `parent` and `main` exist so the list can be grouped by repository rather
+  # than sorted by label: eai-2 and eai/dev1087 are both worktrees of eai, and
+  # only sit next to it alphabetically by luck.
+  worktrees+=("$(jq -nc \
+    --arg repo "$label" \
+    --arg path "$path" \
+    --arg branch "$branch" \
+    --arg parent "$parent" \
+    --argjson main "$is_main" \
+    --argjson dirty "$dirty" \
+    --argjson session_attached "$session_attached" \
+    '{repo: $repo, path: $path, branch: $branch, parent: $parent, main: $main,
+      dirty: $dirty, session_attached: $session_attached}')")
+}
+
 while IFS= read -r root; do
   [ -n "$root" ] || continue
   case "$root" in
@@ -229,27 +265,40 @@ while IFS= read -r root; do
   esac
   [ -d "$root" ] || continue
 
-for d in "$root"/*/; do
-  [ -d "$d" ] || continue
-  [ -d "$d/.git" ] || [ -f "$d/.git" ] || continue
-  repo=$(basename "$d")
-  branch=$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-  dirty=$(git -C "$d" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+  for d in "$root"/*/; do
+    d="${d%/}"
+    [ -d "$d" ] || continue
+    [ -d "$d/.git" ] || [ -f "$d/.git" ] || continue
 
-  session_attached=false
-  case "$agent_cwds" in
-    *$'\n'"${d%/}"$'\n'*) session_attached=true ;;
-  esac
-
-  worktrees+=("$(jq -nc \
-    --arg repo "$repo" \
-    --arg path "${d%/}" \
-    --arg branch "$branch" \
-    --argjson dirty "$dirty" \
-    --argjson session_attached "$session_attached" \
-    '{repo: $repo, path: $path, branch: $branch, dirty: $dirty,
-      session_attached: $session_attached}')")
-done
+    # `git worktree list --porcelain` emits a blank-line-separated record per
+    # worktree: "worktree <path>", then "branch refs/heads/<name>", "detached",
+    # or "bare". The first record is always the main worktree, which is what a
+    # nested worktree gets named after.
+    wt_path=""; wt_branch=""; main_repo=""; main_path=""
+    while IFS= read -r line; do
+      case "$line" in
+        "worktree "*) wt_path="${line#worktree }"
+                      if [ -z "$main_path" ]; then
+                        main_path="$wt_path"; main_repo=$(basename "$wt_path")
+                      fi ;;
+        "branch refs/heads/"*) wt_branch="${line#branch refs/heads/}" ;;
+        "detached")   wt_branch="(detached)" ;;
+        "bare")       wt_path="" ;;
+        "")           if [ -n "$wt_path" ]; then
+                        # Top-level worktrees keep their bare name; anything
+                        # nested is prefixed so it is obvious what it belongs to.
+                        if [ "$(dirname "$wt_path")" = "$root" ]; then
+                          wt_label="$(basename "$wt_path")"
+                        else
+                          wt_label="$main_repo/$(basename "$wt_path")"
+                        fi
+                        if [ "$wt_path" = "$main_path" ]; then is_main=true; else is_main=false; fi
+                        add_worktree "$wt_path" "$wt_branch" "$wt_label" "$main_repo" "$is_main"
+                      fi
+                      wt_path=""; wt_branch="" ;;
+      esac
+    done < <(git -C "$d" worktree list --porcelain 2>/dev/null; echo)
+  done
 # printf '%s\n' matters: without the trailing newline `read` drops the last
 # root, since it returns non-zero on an unterminated final line.
 done < <(printf '%s\n' "$WORKTREE_ROOTS" | tr ':' '\n')
@@ -257,5 +306,5 @@ done < <(printf '%s\n' "$WORKTREE_ROOTS" | tr ':' '\n')
 # jq -s over an empty stream yields [], so both arrays are always well formed.
 jq -n \
   --argjson sessions "$(printf '%s\n' ${sessions[@]+"${sessions[@]}"} | jq -sc '.')" \
-  --argjson worktrees "$(printf '%s\n' ${worktrees[@]+"${worktrees[@]}"} | jq -sc '.')" \
+  --argjson worktrees "$(printf '%s\n' ${worktrees[@]+"${worktrees[@]}"} | jq -sc 'sort_by([.parent, (if .main then 0 else 1 end), .repo])')" \
   '{sessions: $sessions, worktrees: $worktrees}'
