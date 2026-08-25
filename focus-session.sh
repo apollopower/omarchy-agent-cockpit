@@ -3,6 +3,7 @@
 # selecting a pane or opening a new window in it first.
 #
 # Usage:
+#   focus-session.sh open-term <path> [term]  open <path> in a new terminal
 #   focus-session.sh tmux-new <path>          new tmux window rooted at <path>
 #   focus-session.sh <window>.<pane> [addr]   select an existing tmux pane
 #   focus-session.sh "" <addr>                focus a plain (non-tmux) window
@@ -93,7 +94,22 @@ focus_window() {
 
 target() { printf '%s' "$client_session"; }
 
-if [ "${1:-}" = "tmux-new" ]; then
+if [ "${1:-}" = "open-term" ]; then
+  # Every terminal spells the working-directory flag differently, so the choice
+  # and the flag have to travel together. xdg-terminal-exec comes before any
+  # named terminal: it launches whatever the user set as their desktop default.
+  workdir="${2:-$HOME}"
+  for candidate in "${3:-}" "${TERMINAL:-}" xdg-terminal-exec alacritty foot kitty ghostty; do
+    [ -n "$candidate" ] || continue
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    case "$(basename "$candidate")" in
+      xdg-terminal-exec) exec "$candidate" --dir="$workdir" ;;
+      kitty)             exec "$candidate" --directory "$workdir" ;;
+      *)                 exec "$candidate" --working-directory "$workdir" ;;
+    esac
+  done
+  exit 1
+elif [ "${1:-}" = "tmux-new" ]; then
   tmux new-window -t "$(target):" -c "${2:-$HOME}"
   focus_window "$(terminal_address)"
 elif [ -n "${1:-}" ]; then
