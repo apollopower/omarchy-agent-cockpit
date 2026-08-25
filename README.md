@@ -38,8 +38,8 @@ Set these under the widget's entry in `~/.config/omarchy/shell.json`:
 
 ## What the states mean
 
-The bar shows a `>_` icon whenever agent sessions are running. It stays the
-same colour as its neighbours until one of them is **blocked**, and then shifts
+The bar shows a `>_` icon, always present like the other status icons. It stays
+the same colour as its neighbours until an agent is **blocked**, and then shifts
 to your theme's urgent colour. Nothing appears, nothing counts up.
 
 | State | Icon | What it actually means |

@@ -78,8 +78,12 @@ BarWidget {
     if ("hostWidget" in target) target.hostWidget = root
   }
 
-  implicitWidth: hasSessions ? button.implicitWidth : 0
-  implicitHeight: hasSessions ? button.implicitHeight : 0
+  // Always present, like the other status icons. Collapsing to zero width when
+  // no agent happened to be running took the worktree list with it -- the panel
+  // became unclickable exactly when there was nothing else going on -- and left
+  // a freshly installed plugin looking like it had not installed at all.
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
 
   onBarChanged: injectPanel()
   onDataRevisionChanged: injectPanel()
@@ -161,6 +165,12 @@ BarWidget {
     slotSize: Style.bar.statusSlot
     active: root.hasBlocked
     tooltipText: {
+      if (root.totalSessions === 0) {
+        var trees = root.worktrees.length
+        return trees > 0
+          ? "No agent sessions \u00b7 " + trees + " worktree" + (trees === 1 ? "" : "s")
+          : "No agent sessions"
+      }
       var parts = []
       if (root.blockedSessions > 0) parts.push(root.blockedSessions + " blocked")
       var working = root.countState("working")
