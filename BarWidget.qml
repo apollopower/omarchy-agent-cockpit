@@ -6,12 +6,18 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "apollo.sessions"
+  moduleName: "apollo.agent-cockpit"
 
   property int refreshIntervalSec: Math.max(5, Number(setting("refreshIntervalSec", 10)))
-  property int blockedThresholdSec: Math.max(10, Number(setting("blockedThresholdSec", 30)))
-  readonly property string home: String(Quickshell.env("HOME") || "/home/apollo")
-  readonly property string scriptPath: home + "/.config/omarchy/plugins/apollo.sessions/session-poll.sh"
+  property int stuckAfterSec: Math.max(60, Number(setting("stuckAfterSec", 600)))
+  readonly property string worktreeRoots: String(setting("worktreeRoots", "~/Work/repos"))
+
+  // Resolved against this file rather than a fixed plugin path, so the plugin
+  // keeps working whatever its install directory is named.
+  function localPath(name) {
+    return String(Qt.resolvedUrl(name)).replace(/^file:\/\//, "")
+  }
+  readonly property string scriptPath: localPath("session-poll.sh")
 
   function setting(name, fallback) {
     var value = settings ? settings[name] : undefined
@@ -24,20 +30,20 @@ BarWidget {
   property bool polling: false
 
   readonly property int totalSessions: sessions.length
-  readonly property int blockedSessions: {
+
+  function countState(state) {
     var n = 0
     for (var i = 0; i < sessions.length; i++)
-      if (sessions[i] && sessions[i].status === "blocked") n++
+      if (sessions[i] && sessions[i].status === state) n++
     return n
   }
+
+  // Only "blocked" lights the bar. An agent that merely finished its turn is
+  // not something to interrupt you for, which is what made the old
+  // any-session-not-working badge cry wolf.
+  readonly property int blockedSessions: countState("blocked")
   readonly property bool hasBlocked: blockedSessions > 0
   readonly property bool hasSessions: totalSessions > 0
-
-  readonly property string barLabel: {
-    if (!hasSessions) return ""
-    if (hasBlocked) return String(blockedSessions) + "/" + String(totalSessions)
-    return String(totalSessions)
-  }
 
   readonly property bool opened: panelLoader.item
     ? panelLoader.item.opened === true
@@ -105,7 +111,8 @@ BarWidget {
 
   function rescanSessions() {
     if (pollProcess.running) return
-    pollProcess.command = ["bash", root.scriptPath, String(root.blockedThresholdSec)]
+    pollProcess.command = ["bash", root.scriptPath,
+                           String(root.stuckAfterSec), root.worktreeRoots]
     pollProcess.running = true
   }
 
@@ -132,7 +139,7 @@ BarWidget {
   }
 
   IpcHandler {
-    target: "apollo.sessions"
+    target: "apollo.agent-cockpit"
     function open(): void { root.open() }
     function close(): void { root.close() }
     function show(): void { root.open() }
@@ -140,17 +147,31 @@ BarWidget {
     function toggle(): void { root.toggle() }
   }
 
-  WidgetButton {
+  // An icon rather than a count, matching the other bar widgets. `active` tints
+  // it with bar.urgent, and the bar animates that colour over 420ms, so an
+  // agent needing you arrives as a gentle shift rather than a new glyph.
+  BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.barLabel
+    // A terminal prompt, not a robot: the neighbouring agents widget already
+    // owns the robot glyph, and U+F544 (fa-robot) is absent from the bar font
+    // and renders as tofu.
+    text: "\uf120"
+    slotSize: Style.bar.statusSlot
+    active: root.hasBlocked
     tooltipText: {
-      if (root.hasBlocked)
-        return totalSessions + " session" + (totalSessions === 1 ? "" : "s") + " \u00b7 " + blockedSessions + " blocked"
-      return totalSessions + " session" + (totalSessions === 1 ? "" : "s")
+      var parts = []
+      if (root.blockedSessions > 0) parts.push(root.blockedSessions + " blocked")
+      var working = root.countState("working")
+      if (working > 0) parts.push(working + " working")
+      var idle = root.countState("idle")
+      if (idle > 0) parts.push(idle + " idle")
+      var stuck = root.countState("stuck")
+      if (stuck > 0) parts.push(stuck + " stuck")
+      var head = totalSessions + " agent session" + (totalSessions === 1 ? "" : "s")
+      return parts.length > 0 ? head + " \u00b7 " + parts.join(", ") : head
     }
-    horizontalMargin: 6
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton) root.toggle()
     }

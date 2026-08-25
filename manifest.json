@@ -1,23 +1,27 @@
 {
   "schemaVersion": 1,
-  "id": "apollo.sessions",
-  "name": "Sessions",
+  "id": "apollo.agent-cockpit",
+  "name": "Agent Cockpit",
   "version": "1.0.0",
   "author": "Apollo",
   "license": "MIT",
-  "description": "Agent session cockpit showing live Claude and Opencode sessions with blocked/working state, plus worktree status.",
-  "kinds": ["bar-widget"],
+  "description": "Live Claude and Opencode sessions with blocked/working state and exact tmux pane targeting, plus git worktree status.",
+  "kinds": [
+    "bar-widget"
+  ],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Sessions",
+    "displayName": "Agent Cockpit",
     "category": "AI",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
       "refreshIntervalSec": 10,
-      "blockedThresholdSec": 30
+      "stuckAfterSec": 600,
+      "worktreeRoots": "~/Work/repos",
+      "terminal": ""
     }
   }
 }

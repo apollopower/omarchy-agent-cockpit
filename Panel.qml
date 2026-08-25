@@ -6,7 +6,7 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "apollo.sessions"
+  moduleName: "apollo.agent-cockpit"
   manageIpc: false
 
   property var anchorItem: null
@@ -21,8 +21,14 @@ Panel {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color accentColor: Style.selectedStateColor(foreground, Color.accent)
-  readonly property string home: String(Quickshell.env("HOME") || "/home/apollo")
-  readonly property string focusScript: home + "/.config/omarchy/plugins/apollo.sessions/focus-session.sh"
+  // Resolved against this file rather than a fixed plugin path -- see
+  // BarWidget.localPath().
+  readonly property string focusScript:
+    String(Qt.resolvedUrl("focus-session.sh")).replace(/^file:\/\//, "")
+  // Terminal used to open a worktree outside tmux. Empty means "ask the
+  // system", since Omarchy ships Alacritty while this plugin was written
+  // against foot.
+  readonly property string terminal: String(setting("terminal", ""))
   readonly property color selectFill: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.15)
 
   readonly property real panelWidth: Style.space(520)
@@ -175,7 +181,10 @@ Panel {
   }
 
   function openWorktree(worktree) {
-    runCmd("foot --working-directory '" + String(worktree.path || "") + "'")
+    // Terminal selection and each terminal's working-directory flag live in
+    // focus-session.sh; the panel only says which worktree and which preference.
+    runCmd("bash '" + root.focusScript + "' open-term '"
+         + String(worktree.path || "") + "' '" + root.terminal + "'")
     root.controller.hide()
   }
 
@@ -195,7 +204,40 @@ Panel {
   readonly property real iconColWidth: Style.space(20)
   readonly property real agentColWidth: Style.space(80)
 
-  function sessionStatusWidth() { return Style.space(90) }
+  function sessionStatusWidth() { return Style.space(104) }
+
+  // Four states, each meaning something different. Only "blocked" -- an agent
+  // stopped on a question it asked -- actually needs the user now, so it is the
+  // only one that reads as urgent. "Idle" deliberately claims nothing about
+  // whether the agent finished or is waiting: the signal cannot tell them apart.
+  function stateIcon(state) {
+    if (state === "blocked") return "\uf059"   // question mark: awaiting your answer
+    if (state === "stuck")   return "\uf071"   // warning: loop died mid-flight
+    if (state === "idle")    return "\uf111"   // dot: stopped, nothing to do
+    return "\uf021"                            // arrows: mid loop
+  }
+
+  function stateColor(state) {
+    if (state === "blocked" || state === "stuck") return root.urgent
+    if (state === "idle") return root.dim
+    return root.accentColor
+  }
+
+  function stateLabel(state, stale) {
+    if (state === "blocked") return "Blocked " + root.formatStale(stale)
+    if (state === "stuck")   return "Stuck " + root.formatStale(stale)
+    if (state === "idle")    return "Idle " + root.formatStale(stale)
+    return "Working"
+  }
+
+  // "Blocked 74929s" neither fits the status column nor reads as a duration.
+  function formatStale(seconds) {
+    var s = Math.max(0, Number(seconds) || 0)
+    if (s < 60) return s + "s"
+    if (s < 3600) return Math.floor(s / 60) + "m"
+    if (s < 86400) return Math.floor(s / 3600) + "h"
+    return Math.floor(s / 86400) + "d"
+  }
   function worktreeBranchWidth() { return Style.space(130) }
   function worktreeDirtyWidth() { return Style.space(60) }
 
@@ -264,6 +306,7 @@ Panel {
               model: root.sessionsData
 
               Item {
+                id: sessionEntry
                 required property var modelData
                 required property int index
 
@@ -271,7 +314,8 @@ Panel {
                 implicitHeight: root.rowHeight
 
                 readonly property var session: modelData
-                readonly property bool blocked: String(session.status || "") === "blocked"
+                readonly property string state: String(session.status || "working")
+                readonly property bool needsAttention: state === "blocked" || state === "stuck"
                 readonly property bool sel: root.isSessionSelected(index)
 
                 Rectangle {
@@ -295,8 +339,8 @@ Panel {
 
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: sessionRow.blocked ? "\uf071" : "\uf058"
-                    color: sessionRow.blocked ? root.urgent : root.dim
+                    text: root.stateIcon(sessionEntry.state)
+                    color: root.stateColor(sessionEntry.state)
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                     width: root.iconColWidth
@@ -305,7 +349,7 @@ Panel {
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: String(session.repo || "")
-                    color: sessionRow.blocked ? root.foreground : root.foreground
+                    color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
@@ -324,10 +368,8 @@ Panel {
 
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: sessionRow.blocked
-                      ? "Blocked " + String(session.stale || 0) + "s"
-                      : "Working"
-                    color: sessionRow.blocked ? root.urgent : root.accentColor
+                    text: root.stateLabel(sessionEntry.state, session.stale)
+                    color: root.stateColor(sessionEntry.state)
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
                     width: root.sessionStatusWidth()
@@ -382,6 +424,7 @@ Panel {
               model: root.worktreesData
 
               Item {
+                id: worktreeEntry
                 required property var modelData
                 required property int index
 
@@ -413,8 +456,8 @@ Panel {
 
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: worktreeRow.dirty ? "\uf071" : "\uf4a7"
-                    color: worktreeRow.dirty ? root.urgent : root.dim
+                    text: worktreeEntry.dirty ? "\uf071" : "\uf4a7"
+                    color: worktreeEntry.dirty ? root.urgent : root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                     width: root.iconColWidth
