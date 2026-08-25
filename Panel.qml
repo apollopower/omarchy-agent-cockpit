@@ -145,12 +145,25 @@ Panel {
     if (root.bar && typeof root.bar.run === "function") root.bar.run(cmd)
   }
 
-  function focusSession(session) {
-    var pane = String(session.tmux_pane || "")
-    var addr = String(session.window_addr || "")
+  // Both activation paths hand off to focus-session.sh identically: close the
+  // panel, then run the script a beat later. The script verifies and retries
+  // its own focus dispatch, so this delay only has to get out of the panel's
+  // way -- it does not have to win the race against the layer surface
+  // unmapping, which is what the earlier per-path delays were guessing at.
+  // Arguments are single-quoted so an empty one stays a separate empty
+  // argument instead of shifting the next one into its place.
+  function runFocusScript(arg1, arg2) {
     root.controller.hide()
-    focusTimer.script = "bash " + root.focusScript + " " + pane + " " + addr
+    focusTimer.script = "bash '" + root.focusScript + "' '" + arg1 + "' '" + arg2 + "'"
     focusTimer.restart()
+  }
+
+  function focusSession(session) {
+    runFocusScript(String(session.tmux_pane || ""), String(session.window_addr || ""))
+  }
+
+  function openWorktreeInTmux(worktree) {
+    runFocusScript("tmux-new", String(worktree.path || ""))
   }
 
   Timer {
@@ -158,36 +171,12 @@ Panel {
     interval: 80
     repeat: false
     property string script: ""
-    onTriggered: {
-      if (root.bar && typeof root.bar.run === "function") root.bar.run(script)
-    }
+    onTriggered: root.runCmd(script)
   }
 
   function openWorktree(worktree) {
-    var path = String(worktree.path || "")
-    runCmd("foot --working-directory " + path)
+    runCmd("foot --working-directory '" + String(worktree.path || "") + "'")
     root.controller.hide()
-  }
-
-  function openWorktreeInTmux(worktree) {
-    var path = String(worktree.path || "")
-    root.controller.hide()
-    Qt.callLater(function() {
-      wtTmuxTimer.path = path
-      wtTmuxTimer.restart()
-    })
-  }
-
-  Timer {
-    id: wtTmuxTimer
-    interval: 250
-    repeat: false
-    property string path: ""
-    onTriggered: {
-      if (path === "") return
-      var cmd = "bash " + root.focusScript + " tmux-new " + path
-      if (root.bar && typeof root.bar.run === "function") root.bar.run(cmd)
-    }
   }
 
   function activateSelectedInTmux() {
