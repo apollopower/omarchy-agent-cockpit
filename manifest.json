@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "Apollo",
   "license": "MIT",
-  "description": "Live Claude and Opencode sessions with blocked/working state and exact tmux pane targeting, plus git worktree status.",
+  "description": "Live Claude Code and opencode sessions with blocked/working state and exact tmux pane targeting, plus git worktree status.",
   "kinds": [
     "bar-widget"
   ],
@@ -21,6 +21,7 @@
       "refreshIntervalSec": 10,
       "stuckAfterSec": 600,
       "worktreeRoots": "~/Work/repos",
+      "showLinkedWorktrees": true,
       "terminal": ""
     }
   }

@@ -11,6 +11,8 @@ BarWidget {
   property int refreshIntervalSec: Math.max(5, Number(setting("refreshIntervalSec", 10)))
   property int stuckAfterSec: Math.max(60, Number(setting("stuckAfterSec", 600)))
   readonly property string worktreeRoots: String(setting("worktreeRoots", "~/Work/repos"))
+  // Which mode the panel opens in. `w` flips it live; this only sets the start.
+  readonly property bool showLinkedWorktrees: setting("showLinkedWorktrees", true) !== false
 
   // Resolved against this file rather than a fixed plugin path, so the plugin
   // keeps working whatever its install directory is named.
@@ -74,6 +76,7 @@ BarWidget {
     if ("bar" in target) target.bar = root.bar
     if ("sessionsData" in target) target.sessionsData = root.sessions
     if ("worktreesData" in target) target.worktreesData = root.worktrees
+    if ("linkedDefault" in target) target.linkedDefault = root.showLinkedWorktrees
     if ("anchorItem" in target) target.anchorItem = button
     if ("hostWidget" in target) target.hostWidget = root
   }

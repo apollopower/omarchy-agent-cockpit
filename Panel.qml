@@ -16,6 +16,27 @@ Panel {
   property var sessionsData: []
   property var worktreesData: []
 
+  // `w` collapses the worktree list to one row per repository and expands it
+  // again. Filtering here rather than in the poll script keeps it instant --
+  // no re-poll, no wait for the next tick. The setting only decides where the
+  // panel starts; assigning showLinked breaks the binding, so a later data
+  // refresh cannot silently undo the user's choice.
+  property bool linkedDefault: true
+  property bool showLinked: linkedDefault
+  readonly property var worktreeRows: {
+    if (showLinked) return worktreesData
+    var rows = []
+    for (var i = 0; i < worktreesData.length; i++)
+      if (worktreesData[i] && worktreesData[i].main === true) rows.push(worktreesData[i])
+    return rows
+  }
+
+  function toggleLinkedWorktrees() {
+    showLinked = !showLinked
+    clampSelected()
+    ensureVisible()
+  }
+
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -31,10 +52,23 @@ Panel {
   readonly property string terminal: String(setting("terminal", ""))
   readonly property color selectFill: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.15)
 
+  // Pinned key legend. The panel is keyboard-driven and `w` in particular has
+  // no other affordance, so the keys have to be stated somewhere. It sits
+  // outside the Flickable: a legend that scrolls away with a long worktree
+  // list would be worse than none.
+  readonly property var legendKeys: [
+    { key: "j/k", label: "move" },
+    { key: "enter", label: "open" },
+    { key: "t", label: "tmux" },
+    { key: "w", label: root.showLinked ? "repos" : "worktrees" },
+    { key: "esc", label: "close" }
+  ]
+  readonly property real legendHeight: Style.font.caption + Style.space(18)
+
   readonly property real panelWidth: Style.space(520)
   readonly property real rowHeight: Style.font.body + Style.space(16)
   readonly property real headerHeight: Style.space(28)
-  readonly property int totalItems: sessionsData.length + worktreesData.length
+  readonly property int totalItems: sessionsData.length + worktreeRows.length
   readonly property int sessionCount: sessionsData.length
 
   readonly property real computedContentHeight: {
@@ -45,11 +79,12 @@ Panel {
     } else {
       h += Style.space(36)
     }
-    if (worktreesData.length > 0) {
+    if (worktreeRows.length > 0) {
       h += Style.space(16)
       h += headerHeight + Style.space(8)
-      h += worktreesData.length * rowHeight + (worktreesData.length - 1) * Style.space(3)
+      h += worktreeRows.length * rowHeight + (worktreeRows.length - 1) * Style.space(3)
     }
+    h += legendHeight
     return h
   }
 
@@ -119,7 +154,7 @@ Panel {
     if (selectedIndex < sessionCount)
       focusSession(sessionsData[selectedIndex])
     else
-      openWorktree(worktreesData[selectedIndex - sessionCount])
+      openWorktree(worktreeRows[selectedIndex - sessionCount])
   }
 
   function open() {
@@ -213,7 +248,7 @@ Panel {
     if (selectedIndex < sessionCount)
       focusSession(sessionsData[selectedIndex])
     else
-      openWorktreeInTmux(worktreesData[selectedIndex - sessionCount])
+      openWorktreeInTmux(worktreeRows[selectedIndex - sessionCount])
   }
 
   function isSessionSelected(index) { return index === selectedIndex && index < sessionCount }
@@ -230,6 +265,16 @@ Panel {
   // stopped on a question it asked -- actually needs the user now, so it is the
   // only one that reads as urgent. "Idle" deliberately claims nothing about
   // whether the agent finished or is waiting: the signal cannot tell them apart.
+  // Capitalising the first letter turned "opencode" into "Opencode", which is
+  // not what the project calls itself. Names are spelled the way their owners
+  // spell them.
+  function agentLabel(agent) {
+    var name = String(agent || "")
+    if (name === "claude") return "Claude"
+    if (name === "opencode") return "opencode"
+    return name
+  }
+
   function stateIcon(state) {
     if (state === "blocked") return "\uf059"   // question mark: awaiting your answer
     if (state === "stuck")   return "\uf071"   // warning: loop died mid-flight
@@ -291,11 +336,15 @@ Panel {
       onActivateRequested: root.activateSelected()
       onTextKey: function(t) {
         if (t === "t") root.activateSelectedInTmux()
+        else if (t === "w") root.toggleLinkedWorktrees()
       }
 
       Flickable {
         id: panelFlick
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: legend.top
         contentWidth: width
         contentHeight: Math.max(panelFlick.height, root.computedContentHeight)
         clip: true
@@ -379,7 +428,7 @@ Panel {
 
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: String(session.agent || "").charAt(0).toUpperCase() + String(session.agent || "").slice(1)
+                    text: root.agentLabel(session.agent)
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -423,25 +472,26 @@ Panel {
           }
 
           PanelSeparator {
-            visible: root.worktreesData.length > 0
+            visible: root.worktreeRows.length > 0
             foreground: root.foreground
           }
 
           PanelSectionHeader {
-            text: "WORKTREES"
+            // Says which mode the list is in, since `w` is the only way to tell.
+            text: root.showLinked ? "WORKTREES" : "REPOSITORIES"
             foreground: root.foreground
             fontFamily: root.fontFamily
-            visible: root.worktreesData.length > 0
+            visible: root.worktreeRows.length > 0
           }
 
           Column {
             id: worktreesSection
-            visible: root.worktreesData.length > 0
+            visible: root.worktreeRows.length > 0
             width: parent.width
             spacing: Style.space(3)
 
             Repeater {
-              model: root.worktreesData
+              model: root.worktreeRows
 
               Item {
                 id: worktreeEntry
@@ -536,6 +586,50 @@ Panel {
                   }
                   onEntered: root.selectedIndex = index + root.sessionCount
                 }
+              }
+            }
+          }
+        }
+      }
+
+      Item {
+        id: legend
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: root.legendHeight
+
+        PanelSeparator {
+          anchors.top: parent.top
+          width: parent.width
+          foreground: root.foreground
+        }
+
+        Row {
+          anchors.centerIn: parent
+          anchors.verticalCenterOffset: Style.space(3)
+          spacing: Style.space(12)
+
+          Repeater {
+            model: root.legendKeys
+
+            Row {
+              required property var modelData
+              spacing: Style.space(4)
+
+              Text {
+                text: modelData.key
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+
+              Text {
+                text: modelData.label
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
               }
             }
           }
