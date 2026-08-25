@@ -59,8 +59,24 @@ Panel {
   property int selectedIndex: -1
   property bool closing: false
 
+  // Height the panel settles at while open. The minimum keeps a nearly empty
+  // panel from looking degenerate, and applying it *here* rather than to the
+  // rendered height is what lets the roll-up reach zero: clamping the rendered
+  // height meant closing stalled at minPanelHeight -- 79% of the way down on a
+  // full panel -- and the leftover box then vanished separately via
+  // KeyboardPanel's card fade, which reads as a stutter rather than one motion.
+  readonly property real openHeight:
+    Math.max(root.minPanelHeight, Math.min(root.computedContentHeight, root.maxPanelHeight))
+
+  // KeyboardPanel fades the card over cardFadeMs once `open` goes false, and
+  // keeps the surface mapped until that finishes. Handing it the hide early, so
+  // the fade ends exactly as the collapse reaches zero, makes the two overlap
+  // into a single movement instead of running back to back.
+  readonly property int collapseMs: 200
+  readonly property int cardFadeMs: 140
+
   Behavior on animatedHeight {
-    NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+    NumberAnimation { duration: root.collapseMs; easing.type: Easing.OutCubic }
   }
 
   function clampSelected() {
@@ -123,6 +139,10 @@ Panel {
     else root.open()
   }
 
+  // A session appearing or ending while the panel is open used to leave the
+  // card at the height it opened with, quietly turning the list scrollable.
+  onOpenHeightChanged: if (opened && !closing) root.animatedHeight = root.openHeight
+
   function switchPanel(direction) {
     if (root.bar && typeof root.bar.switchPanelFrom === "function")
       return root.bar.switchPanelFrom(root.barIdentity, direction)
@@ -131,14 +151,14 @@ Panel {
 
   Timer {
     id: closeTimer
-    interval: 200
+    interval: Math.max(0, root.collapseMs - root.cardFadeMs)
     repeat: false
     onTriggered: root.controller.hide()
   }
 
   onOpenedChanged: {
     if (opened) {
-      root.animatedHeight = Math.min(root.computedContentHeight, root.maxPanelHeight)
+      root.animatedHeight = root.openHeight
       if (totalItems > 0 && selectedIndex < 0) selectedIndex = 0
       clampSelected()
       Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
@@ -257,7 +277,7 @@ Panel {
     open: root.opened
     centerOnBar: true
     contentWidth: panel.fittedContentWidth(root.panelWidth)
-    contentHeight: Math.max(root.minPanelHeight, root.animatedHeight)
+    contentHeight: root.animatedHeight
 
     PanelKeyCatcher {
       id: keyCatcher
