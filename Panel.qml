@@ -172,8 +172,20 @@ Panel {
   function openWorktreeInTmux(worktree) {
     var path = String(worktree.path || "")
     root.controller.hide()
-    focusTimer.script = "bash " + root.focusScript + " tmux-new " + path
-    focusTimer.restart()
+    wtTmuxTimer.path = path
+    wtTmuxTimer.restart()
+  }
+
+  Timer {
+    id: wtTmuxTimer
+    interval: 200
+    repeat: false
+    property string path: ""
+    onTriggered: {
+      if (path === "") return
+      var cmd = "bash " + root.focusScript + " tmux-new " + path
+      if (root.bar && typeof root.bar.run === "function") root.bar.run(cmd)
+    }
   }
 
   function activateSelectedInTmux() {
