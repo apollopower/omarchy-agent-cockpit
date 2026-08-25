@@ -164,13 +164,16 @@ Panel {
   }
 
   function openWorktree(worktree) {
-    runCmd("foot --working-directory " + String(worktree.path || ""))
+    var path = String(worktree.path || "")
+    runCmd("foot --working-directory " + path)
     root.controller.hide()
   }
 
   function openWorktreeInTmux(worktree) {
-    runCmd("foot tmux new-window -c " + String(worktree.path || ""))
+    var path = String(worktree.path || "")
     root.controller.hide()
+    focusTimer.script = "bash " + root.focusScript + " tmux-new " + path
+    focusTimer.restart()
   }
 
   function activateSelectedInTmux() {
