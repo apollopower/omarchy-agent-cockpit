@@ -172,13 +172,15 @@ Panel {
   function openWorktreeInTmux(worktree) {
     var path = String(worktree.path || "")
     root.controller.hide()
-    wtTmuxTimer.path = path
-    wtTmuxTimer.restart()
+    Qt.callLater(function() {
+      wtTmuxTimer.path = path
+      wtTmuxTimer.restart()
+    })
   }
 
   Timer {
     id: wtTmuxTimer
-    interval: 200
+    interval: 250
     repeat: false
     property string path: ""
     onTriggered: {
