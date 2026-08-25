@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "apollo.sessions",
+  "name": "Sessions",
+  "version": "1.0.0",
+  "author": "Apollo",
+  "license": "MIT",
+  "description": "Agent session cockpit showing live Claude and Opencode sessions with blocked/working state, plus worktree status.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Sessions",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 10,
+      "blockedThresholdSec": 30
+    }
+  }
+}
