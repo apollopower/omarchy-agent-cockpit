@@ -10,6 +10,7 @@ for c in json.load(sys.stdin):
         break
 " 2>/dev/null)
   [ -n "$addr" ] && hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" 2>/dev/null
+  sleep 0.1
   tmux new-window -c "${2:-$HOME}"
 elif [ -n "$1" ]; then
   # tmux session: find and focus the terminal window
