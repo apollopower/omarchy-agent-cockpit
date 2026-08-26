@@ -127,6 +127,11 @@ sessions=()
 for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
   cwd=$(readlink /proc/$pid/cwd 2>/dev/null || echo "")
   [ -z "$cwd" ] && continue
+  # The kernel appends " (deleted)" once a process's cwd is removed out from
+  # under it, and an agent easily outlives a worktree. Rendering that verbatim
+  # leaks plumbing into the panel; stripping it also restores status detection,
+  # since the transcript directory is still named after the original path.
+  cwd=${cwd% (deleted)}
 
   cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null || echo "")
   cmd="${cmd% }"
