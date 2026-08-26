@@ -216,18 +216,21 @@ Panel {
   // its own focus dispatch, so this delay only has to get out of the panel's
   // way -- it does not have to win the race against the layer surface
   // unmapping, which is what the earlier per-path delays were guessing at.
-  function runFocusScript(arg1, arg2) {
+  function runFocusScript(args) {
     root.controller.hide()
-    focusTimer.argv = ["bash", root.focusScript, arg1, arg2]
+    focusTimer.argv = ["bash", root.focusScript].concat(args)
     focusTimer.restart()
   }
 
   function focusSession(session) {
-    runFocusScript(String(session.tmux_pane || ""), String(session.window_addr || ""))
+    runFocusScript([String(session.tmux_pane || ""),
+                    String(session.window_addr || "")])
   }
 
+  // The terminal preference travels with this too: with no tmux running the
+  // script has to open one, and it should be the same terminal `enter` opens.
   function openWorktreeInTmux(worktree) {
-    runFocusScript("tmux-new", String(worktree.path || ""))
+    runFocusScript(["tmux-new", String(worktree.path || ""), root.terminal])
   }
 
   Timer {
