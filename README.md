@@ -102,7 +102,8 @@ tail is read, since transcripts reach megabytes.
 
 Worktrees come from `git worktree list` on every repository found under
 `worktreeRoots`, not from the directory layout — so a worktree parked inside
-its own repo (`.plax/worktrees/<name>`, a common convention for agent tooling)
+its own repo (`.worktrees/<name>` and similar, a common convention for agent
+tooling)
 is listed like any other. They are grouped under the repository they belong to,
 and nested ones are labelled `<repo>/<worktree>` so it is obvious what they are
 part of. A plain clone reports itself as its own single worktree, so it appears
