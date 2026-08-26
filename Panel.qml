@@ -202,8 +202,13 @@ Panel {
     }
   }
 
-  function runCmd(cmd) {
-    if (root.bar && typeof root.bar.run === "function") root.bar.run(cmd)
+  // Every argument here is a path, a branch or a tmux handle that came off the
+  // filesystem, so none of it may be pasted into a shell command line: a
+  // worktree directory is free to contain a quote, and pasting one in would end
+  // the quoting and start a command. Util.execArgv runs `exec "$@"`, so the
+  // arguments only ever land in positional parameters and are never re-parsed.
+  function runArgv(argv) {
+    Util.execArgv(argv)
   }
 
   // Both activation paths hand off to focus-session.sh identically: close the
@@ -211,11 +216,9 @@ Panel {
   // its own focus dispatch, so this delay only has to get out of the panel's
   // way -- it does not have to win the race against the layer surface
   // unmapping, which is what the earlier per-path delays were guessing at.
-  // Arguments are single-quoted so an empty one stays a separate empty
-  // argument instead of shifting the next one into its place.
   function runFocusScript(arg1, arg2) {
     root.controller.hide()
-    focusTimer.script = "bash '" + root.focusScript + "' '" + arg1 + "' '" + arg2 + "'"
+    focusTimer.argv = ["bash", root.focusScript, arg1, arg2]
     focusTimer.restart()
   }
 
@@ -231,15 +234,15 @@ Panel {
     id: focusTimer
     interval: 80
     repeat: false
-    property string script: ""
-    onTriggered: root.runCmd(script)
+    property var argv: []
+    onTriggered: root.runArgv(argv)
   }
 
   function openWorktree(worktree) {
     // Terminal selection and each terminal's working-directory flag live in
     // focus-session.sh; the panel only says which worktree and which preference.
-    runCmd("bash '" + root.focusScript + "' open-term '"
-         + String(worktree.path || "") + "' '" + root.terminal + "'")
+    runArgv(["bash", root.focusScript, "open-term",
+             String(worktree.path || ""), root.terminal])
     root.controller.hide()
   }
 

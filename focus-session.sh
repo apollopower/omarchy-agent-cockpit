@@ -81,9 +81,19 @@ terminal_address() {
 
 # Dispatch focus and confirm it stuck, re-dispatching if something else (the
 # closing panel) claimed it in between.
+#
+# The address is checked against the shape Hyprland actually uses before it is
+# interpolated. It reaches us as an argument rather than through the shell, so
+# this is not about quoting -- it is that hyprctl parses the dispatch string as
+# an expression, and an argument that arrives malformed should be refused here
+# rather than handed to a parser to make sense of.
 focus_window() {
   local addr=$1 attempt
   [ -n "$addr" ] || return 1
+  case "$addr" in
+    0x*) case "${addr#0x}" in '' | *[!0-9a-fA-F]*) return 1 ;; esac ;;
+    *) return 1 ;;
+  esac
   for attempt in 1 2 3 4 5 6; do
     hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null
     [ "$(active_address)" = "$addr" ] && return 0
@@ -113,11 +123,22 @@ elif [ "${1:-}" = "tmux-new" ]; then
   tmux new-window -t "$(target):" -c "${2:-$HOME}"
   focus_window "$(terminal_address)"
 elif [ -n "${1:-}" ]; then
-  # Existing tmux pane, addressed as <window>.<pane> by session-poll.sh.
-  win=${1%%.*}
-  pane=${1##*.}
-  tmux select-window -t "$(target):$win"
-  tmux select-pane -t "$(target):$win.$pane"
+  # An existing pane, in one of the two shapes session-poll.sh emits: the
+  # <window>.<pane> pair it resolves, or the raw %N pane id it falls back to
+  # when that lookup comes up empty. Both are matched by deleting the digits
+  # and looking at what is left, which is exact where a glob is not --
+  # "1x.2" satisfies [0-9]*.[0-9]* and is not a pane reference.
+  #
+  # Anything else is not something this plugin produced. There is nothing to
+  # select, so the window is focused and tmux keeps whatever pane it is on,
+  # rather than a stray value being passed to tmux to interpret as a target.
+  case "${1//[0-9]/}" in
+    ".") win=${1%%.*}
+         pane=${1##*.}
+         tmux select-window -t "$(target):$win"
+         tmux select-pane -t "$(target):$win.$pane" ;;
+    "%") tmux select-pane -t "$1" ;;
+  esac
   # Prefer the address session-poll.sh recorded; fall back if it went stale.
   focus_window "${2:-}" || focus_window "$(terminal_address)"
 elif [ -n "${2:-}" ]; then

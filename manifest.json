@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "apollo.agent-cockpit",
   "name": "Agent Cockpit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Apollo",
   "license": "MIT",
   "description": "Live Claude Code and opencode sessions with blocked/working state and exact tmux pane targeting, plus git worktree status.",
