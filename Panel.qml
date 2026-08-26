@@ -261,7 +261,7 @@ Panel {
 
   function sessionStatusWidth() { return Style.space(104) }
 
-  // Four states, each meaning something different. Only "blocked" -- an agent
+  // Five states, each meaning something different. Only "blocked" -- an agent
   // stopped on a question it asked -- actually needs the user now, so it is the
   // only one that reads as urgent. "Idle" deliberately claims nothing about
   // whether the agent finished or is waiting: the signal cannot tell them apart.
@@ -279,12 +279,13 @@ Panel {
     if (state === "blocked") return "\uf059"   // question mark: awaiting your answer
     if (state === "stuck")   return "\uf071"   // warning: loop died mid-flight
     if (state === "idle")    return "\uf111"   // dot: stopped, nothing to do
+    if (state === "unknown") return "\uf141"   // ellipsis: no reading available
     return "\uf021"                            // arrows: mid loop
   }
 
   function stateColor(state) {
     if (state === "blocked" || state === "stuck") return root.urgent
-    if (state === "idle") return root.dim
+    if (state === "idle" || state === "unknown") return root.dim
     return root.accentColor
   }
 
@@ -292,6 +293,7 @@ Panel {
     if (state === "blocked") return "Blocked " + root.formatStale(stale)
     if (state === "stuck")   return "Stuck " + root.formatStale(stale)
     if (state === "idle")    return "Idle " + root.formatStale(stale)
+    if (state === "unknown") return "Unknown"
     return "Working"
   }
 

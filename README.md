@@ -62,6 +62,7 @@ interesting:
 | **Working** | arrows, accent | Mid agent loop. Stays working through a long tool call. |
 | **Idle** | dot, dim | The turn ended. It might be finished, it might be waiting — that is not knowable, so nothing is claimed. |
 | **Stuck** | warning, urgent | Claims to be mid-loop but has not moved in `stuckAfterSec`. Usually a killed session. |
+| **Unknown** | ellipsis, dim | The agent's own record could not be read — no `sqlite3`, no opencode store, no transcript yet, or a schema this version does not recognise. Deliberately not a guess. |
 
 "Blocked" is deliberately narrow. Earlier versions called any quiet session
 blocked, which meant a long `cargo build` looked identical to an agent waiting
@@ -92,6 +93,10 @@ tail is read, since transcripts reach megabytes.
 - **Two instances of the same agent in one directory share a reading**, because
   state is keyed by working directory. Two *different* agents in the same
   directory are tracked separately.
+- **The record formats are observed, not promised.** opencode's schema was read
+  from 1.18.21 and Claude's transcript layout from the files it writes today.
+  Neither is a published interface, so either could change. When that happens
+  sessions report Unknown, which is visibly wrong rather than quietly wrong.
 
 ### Which worktrees are listed
 
@@ -113,7 +118,7 @@ worktrees too, not just nested ones: a sibling directory created by
 Omarchy's Quickshell bar and Hyprland. Beyond that: `jq`, `python3`, `git` and
 `hyprctl`, all present on a stock Omarchy install. `tmux` is needed for pane
 focusing and the `t` key. `sqlite3` is needed for opencode status — without it
-opencode sessions fall back to the Claude transcript heuristic.
+opencode sessions report Unknown rather than being guessed at.
 
 Nothing is written outside the plugin directory, so removal is just
 `omarchy plugin remove apollo.agent-cockpit`.
