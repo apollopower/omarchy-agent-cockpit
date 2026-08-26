@@ -409,6 +409,7 @@ Panel {
                   spacing: Style.space(10)
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.stateIcon(sessionEntry.state)
                     color: root.stateColor(sessionEntry.state)
@@ -418,6 +419,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: String(session.repo || "")
                     color: root.foreground
@@ -429,6 +431,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.agentLabel(session.agent)
                     color: root.dim
@@ -438,6 +441,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.stateLabel(sessionEntry.state, session.stale)
                     color: root.stateColor(sessionEntry.state)
@@ -463,6 +467,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: root.sessionsData.length === 0
             width: parent.width
             topPadding: Style.space(8)
@@ -527,6 +532,7 @@ Panel {
                   spacing: Style.space(10)
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: worktreeEntry.dirty ? "\uf071" : "\uf4a7"
                     color: worktreeEntry.dirty ? root.urgent : root.dim
@@ -536,6 +542,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: String(wt.repo || "")
                     color: root.foreground
@@ -547,6 +554,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: String(wt.branch || "")
                     color: root.dim
@@ -557,6 +565,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     visible: Number(wt.dirty || 0) > 0
                     text: String(wt.dirty || 0) + " dirty"
@@ -567,6 +576,7 @@ Panel {
                   }
 
                   Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     visible: wt.session_attached === true
                     text: "\u26a1"
@@ -620,6 +630,7 @@ Panel {
               spacing: Style.space(4)
 
               Text {
+                textFormat: Text.PlainText
                 text: modelData.key
                 color: root.foreground
                 font.family: root.fontFamily
@@ -628,6 +639,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 text: modelData.label
                 color: root.dim
                 font.family: root.fontFamily
