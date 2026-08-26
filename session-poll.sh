@@ -234,7 +234,7 @@ done
 
 # Ask git what the worktrees are rather than guessing from the directory
 # layout. Globbing $root/*/ only ever saw repos exactly one level down, so a
-# worktree parked inside its own repo -- .plax/worktrees/<name>, a common
+# worktree parked inside its own repo -- .worktrees/<name> and similar, a common
 # convention for agent tooling -- was invisible, and a plain clone was listed
 # as a "worktree" it never was.
 declare -A SEEN_WORKTREE
@@ -254,8 +254,8 @@ add_worktree() {
   esac
 
   # `parent` and `main` exist so the list can be grouped by repository rather
-  # than sorted by label: eai-2 and eai/dev1087 are both worktrees of eai, and
-  # only sit next to it alphabetically by luck.
+  # than sorted by label. A sibling worktree and a nested one both belong to the
+  # same repo, and only land next to it alphabetically by luck.
   worktrees+=("$(jq -nc \
     --arg repo "$label" \
     --arg path "$path" \
