@@ -26,6 +26,14 @@ BarWidget {
     return value === undefined || value === null ? fallback : value
   }
 
+  // The same bounds session-poll.sh enforces, restated where the data is
+  // accepted. The script caps its own output, but this widget is what has to
+  // stay drawable if anything ever hands it more than it promised, so the
+  // limits are checked again rather than assumed.
+  readonly property int maxOutputBytes: 512 * 1024
+  readonly property int maxSessions: 64
+  readonly property int maxWorktrees: 256
+
   property var sessions: []
   property var worktrees: []
   property int dataRevision: 0
@@ -124,10 +132,18 @@ BarWidget {
   }
 
   function parseOutput(raw) {
+    var text = String(raw || "")
+    if (text.length > root.maxOutputBytes) {
+      console.warn("sessions poll produced", text.length,
+                   "bytes; keeping the last good reading")
+      return
+    }
     try {
-      var parsed = JSON.parse(String(raw || ""))
-      root.sessions = Array.isArray(parsed.sessions) ? parsed.sessions : []
-      root.worktrees = Array.isArray(parsed.worktrees) ? parsed.worktrees : []
+      var parsed = JSON.parse(text)
+      root.sessions = Array.isArray(parsed.sessions)
+        ? parsed.sessions.slice(0, root.maxSessions) : []
+      root.worktrees = Array.isArray(parsed.worktrees)
+        ? parsed.worktrees.slice(0, root.maxWorktrees) : []
       root.dataRevision++
     } catch (e) {
       console.warn("sessions parse error:", e)

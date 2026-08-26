@@ -7,6 +7,10 @@
 # and backslashes -- an agent invoked with a multi-line prompt is enough --
 # and hand-built JSON turns that into a parse error, which the widget swallows
 # and then silently renders stale data.
+#
+# Every string is also clipped and every list capped before it is emitted. See
+# the bounds block below: none of this data has a natural size, and the widget
+# buffers the whole document on every tick.
 set -uo pipefail
 
 HOME="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
@@ -22,6 +26,51 @@ STUCK_AFTER="${1:-600}"
 # convention. A leading ~ is expanded here; the shell never sees these quoted
 # values otherwise.
 WORKTREE_ROOTS="${2:-$HOME/Work/repos}"
+
+
+# --- output bounds ------------------------------------------------------------
+# Nothing below this line originates with the plugin. Repository paths, branch
+# names and process command lines are chosen by whoever created them, and none
+# of them has a natural length or a natural count: a branch named from a
+# megabyte of text, a checkout nested a thousand worktrees deep, an agent
+# launched with a book-length prompt on its argv. The widget reads this whole
+# document into memory every refresh interval, so an unbounded producer is an
+# unbounded consumer.
+#
+# The caps are deliberately far above any real setup -- 64 concurrent agents,
+# 256 worktrees -- so they never truncate honest data, only runaway data.
+MAX_SESSIONS=64
+MAX_WORKTREES=256
+MAX_PATH_CHARS=512
+MAX_NAME_CHARS=128
+MAX_CMD_CHARS=200
+MAX_HANDLE_CHARS=64
+# Derived ceiling, and a hard one. The per-field caps above put a session
+# record under ~1KB and a worktree record under ~800B, so the caps on record
+# counts put the whole document under ~270KB. This is that bound restated at
+# the pipe, where it protects the reader rather than trusting the writer:
+# Quickshell's StdioCollector buffers a stream to completion with no limit of
+# its own, so nothing downstream can decline an oversized document once it has
+# been written. Truncation here deliberately produces invalid JSON -- the
+# widget rejects the whole document and keeps its last good picture, which
+# beats rendering half a list as if it were the list.
+MAX_OUTPUT_BYTES=$((512 * 1024))
+
+# clip <text> <max-chars>
+# Flattens a value to one line of printable text and truncates it. Control
+# characters are removed rather than escaped: none of them means anything in a
+# field the panel renders as a single line, and a command line full of NULs
+# turned into "\u0000" costs six bytes apiece for nothing. The ellipsis is kept
+# so a truncated value reads as truncated rather than as a shorter real name.
+clip() {
+  local max=$2 text
+  text=$(printf '%s' "$1" | tr '\t\n\r' '   ' | tr -d '\000-\037\177')
+  if [ "${#text}" -gt "$max" ]; then
+    printf '%s\u2026' "${text:0:$max}"
+  else
+    printf '%s' "$text"
+  fi
+}
 
 
 # --- find terminal PID by walking parent chain ---
@@ -125,6 +174,7 @@ fi
 # --- sessions ---
 sessions=()
 for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
+  [ "${#sessions[@]}" -ge "$MAX_SESSIONS" ] && break
   cwd=$(readlink /proc/$pid/cwd 2>/dev/null || echo "")
   [ -z "$cwd" ] && continue
   # The kernel appends " (deleted)" once a process's cwd is removed out from
@@ -180,6 +230,18 @@ for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
     state_at="${claude_state##*|}"
   fi
 
+  # The status field drives an icon and a colour, so it is only ever one of a
+  # closed set. Pinning that here means a helper that starts printing something
+  # else -- a stray warning, a future state this panel has no rendering for --
+  # degrades to "unknown" instead of reaching the panel as free text.
+  case "$status" in
+    blocked|working|idle|stuck|unknown) ;;
+    *) status="unknown"; state_at=0 ;;
+  esac
+  case "$state_at" in
+    ''|*[!0-9]*) state_at=0 ;;
+  esac
+
   stale=0
   [ "${state_at:-0}" -gt 0 ] 2>/dev/null && stale=$(( NOW - state_at ))
 
@@ -198,7 +260,7 @@ for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
 
   # The panel never displays the full command line, and a multi-line agent
   # prompt can run to kilobytes on every poll. Keep the first line, capped.
-  cmd_summary=$(printf '%s' "$cmd" | head -1 | cut -c1-200)
+  cmd_summary=$(clip "$(printf '%s' "$cmd" | head -1)" "$MAX_CMD_CHARS")
 
   # detect tmux pane (always check regardless of term_pid)
   tmux_pane=""
@@ -211,13 +273,13 @@ for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
 
   sessions+=("$(jq -nc \
     --argjson pid "$pid" \
-    --arg repo "$repo_name" \
-    --arg cwd "$cwd" \
+    --arg repo "$(clip "$repo_name" "$MAX_NAME_CHARS")" \
+    --arg cwd "$(clip "$cwd" "$MAX_PATH_CHARS")" \
     --arg agent "$agent_type" \
     --arg status "$status" \
     --argjson stale "$stale" \
-    --arg window_addr "$window_addr" \
-    --arg tmux_pane "$tmux_pane" \
+    --arg window_addr "$(clip "$window_addr" "$MAX_HANDLE_CHARS")" \
+    --arg tmux_pane "$(clip "$tmux_pane" "$MAX_HANDLE_CHARS")" \
     --arg cmd "$cmd_summary" \
     '{pid: $pid, repo: $repo, cwd: $cwd, agent: $agent, status: $status,
       stale: $stale, window_addr: $window_addr, tmux_pane: $tmux_pane, cmd: $cmd}')")
@@ -243,6 +305,7 @@ worktrees=()
 add_worktree() {
   local path="$1" branch="$2" label="$3" parent="$4" is_main="$5"
   [ -n "$path" ] || return 0
+  [ "${#worktrees[@]}" -ge "$MAX_WORKTREES" ] && return 0
   [ -n "${SEEN_WORKTREE[$path]:-}" ] && return 0
   [ -d "$path" ] || return 0          # git lists prunable entries too
   SEEN_WORKTREE["$path"]=1
@@ -257,10 +320,10 @@ add_worktree() {
   # than sorted by label. A sibling worktree and a nested one both belong to the
   # same repo, and only land next to it alphabetically by luck.
   worktrees+=("$(jq -nc \
-    --arg repo "$label" \
-    --arg path "$path" \
-    --arg branch "$branch" \
-    --arg parent "$parent" \
+    --arg repo "$(clip "$label" "$MAX_NAME_CHARS")" \
+    --arg path "$(clip "$path" "$MAX_PATH_CHARS")" \
+    --arg branch "$(clip "$branch" "$MAX_NAME_CHARS")" \
+    --arg parent "$(clip "$parent" "$MAX_NAME_CHARS")" \
     --argjson main "$is_main" \
     --argjson dirty "$dirty" \
     --argjson session_attached "$session_attached" \
@@ -277,6 +340,7 @@ while IFS= read -r root; do
   [ -d "$root" ] || continue
 
   for d in "$root"/*/; do
+    [ "${#worktrees[@]}" -ge "$MAX_WORKTREES" ] && break
     d="${d%/}"
     [ -d "$d" ] || continue
     [ -d "$d/.git" ] || [ -f "$d/.git" ] || continue
@@ -318,4 +382,4 @@ done < <(printf '%s\n' "$WORKTREE_ROOTS" | tr ':' '\n')
 jq -n \
   --argjson sessions "$(printf '%s\n' ${sessions[@]+"${sessions[@]}"} | jq -sc '.')" \
   --argjson worktrees "$(printf '%s\n' ${worktrees[@]+"${worktrees[@]}"} | jq -sc 'sort_by([.parent, (if .main then 0 else 1 end), .repo])')" \
-  '{sessions: $sessions, worktrees: $worktrees}'
+  '{sessions: $sessions, worktrees: $worktrees}' | head -c "$MAX_OUTPUT_BYTES"
