@@ -182,6 +182,8 @@ BarWidget {
       if (idle > 0) parts.push(idle + " idle")
       var stuck = root.countState("stuck")
       if (stuck > 0) parts.push(stuck + " stuck")
+      var unknown = root.countState("unknown")
+      if (unknown > 0) parts.push(unknown + " unknown")
       var head = totalSessions + " agent session" + (totalSessions === 1 ? "" : "s")
       return parts.length > 0 ? head + " \u00b7 " + parts.join(", ") : head
     }

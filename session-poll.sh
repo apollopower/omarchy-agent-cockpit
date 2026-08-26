@@ -148,12 +148,19 @@ for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
     *)        continue ;;
   esac
 
-  # Each agent is read on its own terms. Both expose the same four states:
+  # Each agent is read on its own terms. Five states:
   #   blocked  stopped on an unanswered question -- the only urgent state
   #   working  mid agent loop
   #   idle     turn ended; finished or waiting, not distinguishable
   #   stuck    claims mid-loop but has not moved in STUCK_AFTER seconds
-  status="working"
+  #   unknown  the agent's own record could not be read
+  #
+  # unknown is the default on purpose. Reading opencode's store depends on
+  # sqlite3 being installed and on a schema observed from one release; Claude's
+  # depends on a transcript existing. When either is unavailable the honest
+  # answer is "no idea", not "working" -- a confident wrong answer is exactly
+  # the failure this widget exists to remove.
+  status="unknown"
   state_at=0
 
   if [ "$is_opencode" = true ] && [ -n "${OC_TS[$cwd]:-}" ]; then
@@ -166,7 +173,6 @@ for pid in $(pgrep -x "claude|opencode" 2>/dev/null || true); do
     claude_state=$(python3 "$SCRIPT_DIR/agent-state.py" "$project_dir" 2>/dev/null || echo "unknown|0")
     status="${claude_state%%|*}"
     state_at="${claude_state##*|}"
-    [ "$status" = "unknown" ] && status="working"
   fi
 
   stale=0
